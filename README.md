@@ -26,10 +26,10 @@ dat/media        408G  1.18T   408G  /dat/media
 dat/plex        6.66G  1.18T  6.66G  /dat/plex
 ```
 
-| Volume | Purpose | Related Files |
-| ====== | ======= | ============= |
-| dat/homes | `$HOME` for per-subsystem users | _none_ |
-| dat/media | My audio/video media collection | [plex.yml](plex.yml), and [ytdl.yml](ytdl.yml) |
+| Volume    | Purpose                                                | Related Files |
+| --------- | ------------------------------------------------------ | ------------- |
+| dat/homes | `$HOME` for per-subsystem users                        | _none_ |
+| dat/media | My audio/video media collection                        | [plex.yml](plex.yml), and [ytdl.yml](ytdl.yml) |
 | dat/plex  | Metadata / configuration storage for Plex Media Server | [plex.yml](plex.yml) |
 
 Current Subsystems
