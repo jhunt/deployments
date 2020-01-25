@@ -1,0 +1,7 @@
+#!/bin/bash
+set -eu
+
+VIDEO=$1
+VID=$(echo "$VIDEO" | sha1sum | sed -e 's/\(........\).*/\1/')
+
+k apply -f <(VIDEO=$VIDEO VID=$VID envsubst <ytdl.yml)

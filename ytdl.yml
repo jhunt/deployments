@@ -1,0 +1,32 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ytdl-${VID}
+  namespace: plex
+
+spec:
+  parallelism: 1
+  template:
+    metadata:
+      labels:
+        job: ytdl-${VID}
+
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name:  ytdl
+          image: filefrog/ytdl:latest
+
+          volumeMounts:
+            - name: media
+              mountPath: /media
+
+          command:
+            - youtube-dl
+            - ${VIDEO}
+
+      volumes:
+        - name: media
+          hostPath:
+            path: /dat/media/yt

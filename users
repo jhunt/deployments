@@ -1,0 +1,38 @@
+#!/bin/bash
+
+#
+# ./users - User Management Script
+#
+# This script makes it trivial to add new users to the
+# single-node Kubernetes host, allowing the pods to
+# execute as different users inside of the kernel, to
+# keep file system ownership safe and orderly.
+#
+# To add a new user, add something like the following
+# to the bottom of the script, and re-run it (as root):
+#
+#    ensure 44xx user "A Description of the user"
+#
+# UIDs start at 4401 and move up.
+#
+
+ensure() {
+  local id=$1
+  local name=$2
+  local comment=$3
+  local base=/dat/homes
+  local home=$base/$name
+
+  echo "[$id] $name ($comment)"
+  if ! getent group $name >/dev/null; then
+    groupadd -g $id $name
+  fi
+
+  if ! getent passwd $name >/dev/null; then
+    useradd -m -b $base  -c "$comment" -g $name -N -u $id $name
+  fi
+  mkdir -p $home
+  chown -R $name $home
+}
+
+ensure 4402 plex "Plex Media Server"
