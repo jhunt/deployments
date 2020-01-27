@@ -1,0 +1,272 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lychee
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lychee
+  namespace: lychee
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lychee
+      gen: "1"
+
+  template:
+    metadata:
+      labels:
+        app: lychee
+        gen: "1"
+
+    spec:
+      hostNetwork: no
+      containers:
+        - name: db
+          image: linuxserver/mariadb
+          imagePullPolicy: Always
+
+          env:
+            - name:  MYSQL_DATABASE
+              value: lychee
+            - name:  MYSQL_USER
+              value: lychee
+            - name:  MYSQL_PASSWORD
+              value: lychee
+
+            - name: PUID
+              value: "4403"
+            - name: PGID
+              value: "4403"
+
+          volumeMounts:
+            - name: lychee-db
+              mountPath: /config
+
+        - name: lychee
+          image: linuxserver/lychee
+          imagePullPolicy: Always
+
+          env:
+            - name: PUID
+              value: "4403"
+            - name: PGID
+              value: "4403"
+#
+          ports:
+            - name: web
+              containerPort: 80
+
+          volumeMounts:
+            - name: lychee-config
+              mountPath: /config
+
+            - name: lychee-pictures
+              mountPath: /pictures
+
+            - name: lychee-import
+              mountPath: /import
+              readOnly: no
+
+      volumes:
+        - name: lychee-pictures
+          hostPath:
+            path: /dat/lychee/data
+
+        - name: lychee-config
+          hostPath:
+            path: /dat/lychee/etc
+
+        - name: lychee-db
+          hostPath:
+            path: /dat/lychee/db
+
+        - name: lychee-import
+          hostPath:
+            path: /dat/upload/photos
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-conf
+  namespace: lychee
+data:
+  nginx.conf: |
+    include /etc/nginx/modules/*.conf;
+
+    user www;
+    worker_processes  1;
+
+    error_log  /dev/stderr warn;
+    pid        /var/run/nginx.pid;
+
+    events {
+        worker_connections  1024;
+    }
+
+    http {
+        include       /etc/nginx/mime.types;
+        default_type  application/octet-stream;
+
+        log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                          '$status $body_bytes_sent "$http_referer" '
+                          '"$http_user_agent" "$http_x_forwarded_for"';
+
+        access_log  /dev/stdout main;
+
+        sendfile        on;
+        #tcp_nopush     on;
+
+        keepalive_timeout  65;
+
+        gzip  on;
+
+        dav_ext_lock_zone   zone=pri:10m;
+
+        server {
+            server_name _;
+
+            location / {
+                root       /davroot;
+                autoindex  on;
+
+                dav_methods           PUT DELETE MKCOL COPY MOVE;
+                dav_ext_methods       PROPFIND OPTIONS LOCK UNLOCK;
+                dav_ext_lock          zone=pri;
+
+                create_full_put_path  on;
+                dav_access            user:rw
+                                      group:rw
+                                      all:r;
+
+                client_max_body_size  20G;
+
+
+                auth_basic           "Photo Import System";
+                auth_basic_user_file /etc/nginx/local/auth.passwd;
+            }
+        }
+    }
+  auth.passwd: |
+    hunt:$apr1$hiL8b5vi$wc6swy4X85ShBb4bN0A4s1
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webdav
+  namespace: lychee
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webdav
+      gen: "1"
+
+  template:
+    metadata:
+      labels:
+        app: webdav
+        gen: "1"
+
+    spec:
+      hostNetwork: no
+      containers:
+        - name: webdav
+          image: filefrog/webdav
+          imagePullPolicy: Always
+
+          ports:
+            - name: webdav
+              containerPort: 80
+
+          volumeMounts:
+            - name: lychee-import
+              mountPath: /davroot/Photo Dump
+              subPath: import
+
+            - name: nginx-conf
+              mountPath: /etc/nginx/local
+              readOnly: yes
+
+          env:
+            - name:  NGINX_UID
+              value: "4403"
+
+            - name:  NGINX_GID
+              value: "4403"
+
+            - name:  NGINX_CONF
+              value: /etc/nginx/local/nginx.conf
+
+      volumes:
+        - name: lychee-import
+          hostPath:
+            path: /dat/upload/photos
+
+        - name: nginx-conf
+          configMap:
+            name: nginx-conf
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: lychee
+  name: lychee
+spec:
+  type: ClusterIP
+  selector:
+    app: lychee
+  ports:
+    - name: web
+      port: 80
+      targetPort: web
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: lychee
+  name: webdav
+spec:
+  type: ClusterIP
+  selector:
+    app: webdav
+  ports:
+    - name: web
+      port: 80
+      targetPort: webdav
+
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  namespace: lychee
+  name: lychee
+
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+
+spec:
+  rules:
+    - host: import.photos.home
+      http:
+        paths:
+          - backend:
+              serviceName: webdav
+              servicePort: web
+
+    - host: photos.home
+      http:
+        paths:
+          - backend:
+              serviceName: lychee
+              servicePort: web

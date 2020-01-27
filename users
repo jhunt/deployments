@@ -35,4 +35,6 @@ ensure() {
   chown -R $name $home
 }
 
+ensure 4401 files "General File Management"
 ensure 4402 plex "Plex Media Server"
+ensure 4403 lychee "Lychee Photo Manageent"
