@@ -1,0 +1,130 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mayan
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mayan
+  namespace: mayan
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mayan
+      gen: "1"
+
+  template:
+    metadata:
+      labels:
+        app: mayan
+        gen: "1"
+
+    spec:
+      hostNetwork: no
+      containers:
+        - name: db
+          image: postgres:latest
+          imagePullPolicy: Always
+
+          env:
+            - name:  POSTGRES_USER
+              value: mayan
+            - name:  POSTGRES_PASSWORD
+              value: mayan
+            - name:  PGDATA
+              value: /data/pgdata
+
+          volumeMounts:
+            - name: mayan-postgres
+              mountPath: /data
+
+        - name: redis
+          image: redis:latest
+          imagePullPolicy: Always
+
+          command:
+            - redis-server
+            - --databases
+            - '2'
+            - --maxmemory-policy
+            - allkeys-lru
+            - --save
+            - ''
+            - --requirepass
+            - mayan
+
+          volumeMounts:
+            - name: mayan-redis
+              mountPath: /data
+
+        - name: mayan
+          image: mayanedms/mayanedms:3.3.11
+
+          env:
+            - name:  MAYAN_DATABASES
+              value: "{'default':{'ENGINE':'django.db.backends.postgresql','NAME':'mayan','PASSWORD':'mayan','USER':'mayan','HOST':'127.0.0.1'}}"
+            - name:  MAYAN_CELERY_BROKER_URL
+              value: redis://:mayan@127.0.0.1:6379/0
+            - name:  MAYAN_CELERY_RESULT_BACKEND
+              value: redis://:mayan@127.0.0.1:6379/1
+#
+          ports:
+            - name: web
+              containerPort: 8000
+
+          volumeMounts:
+            - name: mayan-media
+              mountPath: /var/lib/mayan
+
+      volumes:
+        - name: mayan-postgres
+          hostPath:
+            path: /dat/mayan/data/postgres
+
+        - name: mayan-redis
+          hostPath:
+            path: /dat/mayan/data/redis
+
+        - name: mayan-media
+          hostPath:
+            path: /dat/mayan/media
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: mayan
+  name: mayan
+spec:
+  type: ClusterIP
+  selector:
+    app: mayan
+  ports:
+    - name: web
+      port: 80
+      targetPort: web
+
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  namespace: mayan
+  name: mayan
+
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"
+
+spec:
+  rules:
+    - host: docs.home
+      http:
+        paths:
+          - backend:
+              serviceName: mayan
+              servicePort: web
